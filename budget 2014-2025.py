@@ -1,127 +1,135 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
-# -----------------------------------------------
-# PAGE CONFIG
-# -----------------------------------------------
-st.set_page_config(
-    page_title="Budget Analysis Dashboard",
-    layout="wide",
-    page_icon="💰"
-)
+# ----------------------------------------------------
+# Page Settings
+# ----------------------------------------------------
+st.set_page_config(page_title="Budget Analysis Dashboard", layout="wide")
 
-# -----------------------------------------------
-# STYLING (UI Enhancements)
-# -----------------------------------------------
+# ----------------------------------------------------
+# Custom CSS for Beautiful UI/UX
+# ----------------------------------------------------
 st.markdown("""
-<style>
-    .main { background-color: #f7f7f7; }
-    .title {
-        font-size: 36px;
-        font-weight: 700;
-        text-align: center;
-        color: #2b5876;
-        padding-bottom: 10px;
-    }
-    .subtitle {
-        font-size: 18px;
-        color: #555;
-        text-align: center;
-    }
-    .card {
-        padding: 20px;
-        border-radius: 12px;
-        background-color: white;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
-        text-align: center;
-    }
-</style>
+    <style>
+        .card {
+            padding: 20px;
+            border-radius: 18px;
+            background-color: #f7f7f9;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.08);
+            text-align: center;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        .metric-value {
+            font-size: 26px;
+            font-weight: 700;
+            color: #4b8ef5;
+        }
+        .section-title {
+            font-size: 26px !important;
+            font-weight: 700 !important;
+            color: #333 !important;
+            padding-top: 20px;
+        }
+    </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------------------------
-# SIDEBAR
-# -----------------------------------------------
-st.sidebar.title("📂 Upload Budget File")
-uploaded = st.sidebar.file_uploader("Upload Excel or CSV", type=["csv", "xlsx"])
+# ----------------------------------------------------
+# Title & Instructions
+# ----------------------------------------------------
+st.title("📊 Premium Budget Analysis Dashboard")
+st.write("Upload your **Budget CSV** and explore a clean, modern analysis dashboard.")
 
-st.sidebar.markdown("---")
-st.sidebar.write("📊 **Dashboard Options**")
-view = st.sidebar.radio("Choose View", ["Summary", "Yearly Trend", "Category Breakdown"])
+# ----------------------------------------------------
+# File Upload
+# ----------------------------------------------------
+uploaded_file = st.file_uploader("📂 Upload Your Budget CSV File", type=["csv"])
 
-# -----------------------------------------------
-# HEADER
-# -----------------------------------------------
-st.markdown('<p class="title">💰 Budget Analysis Dashboard</p>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Analyse budgets from 2014–2025 (or any file you upload)</p>', unsafe_allow_html=True)
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
 
-# -----------------------------------------------
-# MAIN LOGIC
-# -----------------------------------------------
-if uploaded:
-    try:
-        if uploaded.name.endswith(".csv"):
-            df = pd.read_csv(uploaded)
-        else:
-            df = pd.read_excel(uploaded)
+    # ----------------------------------------------------
+    # Data Preview
+    # ----------------------------------------------------
+    st.markdown("<div class='section-title'>📌 Data Preview</div>", unsafe_allow_html=True)
+    st.dataframe(df.head(), use_container_width=True)
 
-        st.success("File uploaded successfully!")
+    # ----------------------------------------------------
+    # Auto Detect Columns
+    # ----------------------------------------------------
+    numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+    all_columns = df.columns.tolist()
 
-        # Ensure column names are recognized
-        expected_cols = ["Year", "Category", "Amount"]
-        if not all(col in df.columns for col in expected_cols):
-            st.error("❌ File must contain columns: Year, Category, Amount")
-            st.write("Columns found:", list(df.columns))
-        else:
+    year_candidates = [c for c in all_columns if "year" in c.lower() or "fy" in c.lower()]
+    category_candidates = [
+        c for c in all_columns
+        if any(word in c.lower() for word in ["category", "sector", "department", "head"])
+    ]
 
-            # Display Data Table
-            if st.checkbox("Show Data Table"):
-                st.dataframe(df, use_container_width=True)
+    st.sidebar.header("⚙️ Settings")
 
-            # -------------------------------------------
-            # VIEW 1: SUMMARY
-            # -------------------------------------------
-            if view == "Summary":
-                total_budget = df["Amount"].sum()
-                total_years = df["Year"].nunique()
-                total_categories = df["Category"].nunique()
+    year_col = st.sidebar.selectbox("Select Year Column", [None] + year_candidates)
+    amount_col = st.sidebar.selectbox("Select Amount Column", numeric_cols)
+    category_col = st.sidebar.selectbox("Select Category Column", [None] + category_candidates)
 
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.markdown('<div class="card"><h3>Total Budget</h3><h2>₹{:,.2f}</h2></div>'.format(total_budget),
-                                unsafe_allow_html=True)
-                with col2:
-                    st.markdown(f'<div class="card"><h3>Total Years</h3><h2>{total_years}</h2></div>',
-                                unsafe_allow_html=True)
-                with col3:
-                    st.markdown(f'<div class="card"><h3>Categories</h3><h2>{total_categories}</h2></div>',
-                                unsafe_allow_html=True)
+    if not amount_col:
+        st.error("❌ No numeric amount column found. Cannot continue.")
+        st.stop()
 
-            # -------------------------------------------
-            # VIEW 2: YEARLY TREND
-            # -------------------------------------------
-            elif view == "Yearly Trend":
-                yearly = df.groupby("Year")["Amount"].sum().reset_index()
+    # ----------------------------------------------------
+    # Summary Metrics (Cards)
+    # ----------------------------------------------------
+    st.markdown("<div class='section-title'>📈 Summary Metrics</div>", unsafe_allow_html=True)
 
-                fig = px.line(yearly, x="Year", y="Amount",
-                              markers=True,
-                              title="📈 Year-by-Year Budget Trend")
-                st.plotly_chart(fig, use_container_width=True)
+    total_budget = df[amount_col].sum()
+    avg_budget = df[amount_col].mean()
+    max_budget = df[amount_col].max()
+    min_budget = df[amount_col].min()
 
-            # -------------------------------------------
-            # VIEW 3: CATEGORY BREAKDOWN
-            # -------------------------------------------
-            elif view == "Category Breakdown":
-                category = df.groupby("Category")["Amount"].sum().reset_index()
+    col1, col2, col3, col4 = st.columns(4)
 
-                fig = px.bar(category, x="Category", y="Amount",
-                             title="📊 Budget by Category",
-                             text_auto=True)
-                st.plotly_chart(fig, use_container_width=True)
+    with col1:
+        st.markdown(f"<div class='card'>Total Budget<br><span class='metric-value'>{total_budget:,.2f}</span></div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"<div class='card'>Average Budget<br><span class='metric-value'>{avg_budget:,.2f}</span></div>", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"<div class='card'>Highest Value<br><span class='metric-value'>{max_budget:,.2f}</span></div>", unsafe_allow_html=True)
+    with col4:
+        st.markdown(f"<div class='card'>Lowest Value<br><span class='metric-value'>{min_budget:,.2f}</span></div>", unsafe_allow_html=True)
 
-    except Exception as e:
-        st.error("⚠️ Error reading file.")
-        st.write(e)
+    # ----------------------------------------------------
+    # Year-wise Trend (Streamlit Built-in Chart)
+    # ----------------------------------------------------
+    if year_col:
+        st.markdown("<div class='section-title'>📉 Year-wise Analysis</div>", unsafe_allow_html=True)
+        year_df = df.groupby(year_col)[amount_col].sum().reset_index()
+        year_df = year_df.sort_values(year_col)
+        st.line_chart(year_df, x=year_col, y=amount_col, height=350)
+    else:
+        st.info("👉 Select a Year Column from sidebar to see trend.")
+
+    # ----------------------------------------------------
+    # Category-wise Chart
+    # ----------------------------------------------------
+    if category_col:
+        st.markdown("<div class='section-title'>📊 Category-wise Distribution</div>", unsafe_allow_html=True)
+        cat_df = df.groupby(category_col)[amount_col].sum().reset_index()
+        cat_df = cat_df.sort_values(amount_col, ascending=False)
+        st.bar_chart(cat_df, x=category_col, y=amount_col, height=400)
+    else:
+        st.info("👉 Select a Category Column from sidebar to see category breakdown.")
+
+    # ----------------------------------------------------
+    # Download Cleaned CSV
+    # ----------------------------------------------------
+    st.markdown("<div class='section-title'>📥 Download Processed Data</div>", unsafe_allow_html=True)
+
+    st.download_button(
+        label="📌 Download Cleaned CSV",
+        data=df.to_csv(index=False),
+        file_name="Processed_Budget_Data.csv",
+        mime="text/csv"
+    )
 
 else:
-    st.info("👈 Upload a file from the sidebar to start the analysis.")
+    st.info("⬆ Upload a CSV file to begin.")
